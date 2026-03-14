@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Runtime config — these are written by the app and contain site-specific
+# settings and credentials. Never commit them; use the .example files instead.
+settings.json
+config.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,7 @@
+{
+  "stationName": "",
+  "handlerConfig": [],
+  "pollConfig": { "timelineMs": 500, "graphicsMs": 1500 },
+  "inactivityMinutes": 15,
+  "adminPassword": "1234"
+}
