@@ -6,7 +6,7 @@ import { KeyboardIcon, DisconnectIcon, SettingsIcon } from './Icons.jsx';
 import GraphicBadge from './GraphicBadge.jsx';
 import { ShortcutsModal, DisconnectModal } from './Modals.jsx';
 
-export default function ControlPage({ server, onDisconnect, darkMode, onToggleDarkMode, showHandler, onToggleShowHandler, showContinuePoints, onToggleShowContinuePoints, showThumbnails, onToggleShowThumbnails, showContinueButton, onToggleShowContinueButton, handlerConfig, pollConfig, inactivityMinutes }) {
+export default function ControlPage({ server, onDisconnect, darkMode, onToggleDarkMode, showHandler, onToggleShowHandler, showContinuePoints, onToggleShowContinuePoints, showThumbnails, onToggleShowThumbnails, showContinueButton, onToggleShowContinueButton, showOnAirStatus, onToggleShowOnAirStatus, handlerConfig, pollConfig, inactivityMinutes }) {
   const {
     graphics,
     onAirIds,
@@ -20,7 +20,7 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     takeAllOut,
     continueGraphic,
     buildInfo,
-  } = useMosartConnection(server, pollConfig);
+  } = useMosartConnection(server, { ...pollConfig, enableOnAirStatus: showOnAirStatus });
   const buildVersion = buildInfo?.version || null;
   const displayVersion = buildVersion ? ('v' + parseVersion(buildVersion).slice(0, 3).join('.')) : null;
 
@@ -229,6 +229,7 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
                   <SettingsToggle label="Show Handler" checked={showHandler} onChange={onToggleShowHandler} />
                   <SettingsToggle label="Show Continue Points" checked={showContinuePoints} onChange={onToggleShowContinuePoints} />
                   <SettingsToggle label="Show Continue Button" checked={showContinueButton} onChange={onToggleShowContinueButton} />
+                  <SettingsToggle label="Show On-Air Status" checked={showOnAirStatus} onChange={onToggleShowOnAirStatus} />
                   {/* TODO: Re-enable once Preview Server thumbnails are tested on-network */}
                   {/* <SettingsToggle label="Show Thumbnails" checked={showThumbnails} onChange={onToggleShowThumbnails} /> */}
                 </div>

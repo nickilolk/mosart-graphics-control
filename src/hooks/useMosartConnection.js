@@ -25,7 +25,7 @@ const debug = (...args) => {
  * Polls graphics, timeline, and rundown from the Mosart REST API.
  * Provides takeIn (fire a graphic) and takeAllOut (control command per handler).
  */
-export function useMosartConnection(serverConfig, { timelinePollMs = DEFAULT_TIMELINE_POLL_MS, graphicsPollMs = DEFAULT_GRAPHICS_POLL_MS } = {}) {
+export function useMosartConnection(serverConfig, { timelinePollMs = DEFAULT_TIMELINE_POLL_MS, graphicsPollMs = DEFAULT_GRAPHICS_POLL_MS, enableOnAirStatus = true } = {}) {
   const [graphics, setGraphics] = useState([]);
   const [onAirIds, setOnAirIds] = useState(new Set());
   const [timeline, setTimeline] = useState(null);
@@ -74,6 +74,14 @@ export function useMosartConnection(serverConfig, { timelinePollMs = DEFAULT_TIM
   useEffect(() => {
     apiRef.current = createMosartApi(serverConfig);
   }, [serverConfig]);
+
+  // Clear on-air state immediately when the feature is disabled
+  useEffect(() => {
+    if (!enableOnAirStatus) {
+      setOnAirIds(new Set());
+      onAirFingerprintRef.current = '';
+    }
+  }, [enableOnAirStatus]);
 
   /**
    * Fetch and process the graphics list.
@@ -130,7 +138,7 @@ export function useMosartConnection(serverConfig, { timelinePollMs = DEFAULT_TIM
    * Non-fatal — if the endpoint fails we just leave the previous state.
    */
   const fetchOnAirGraphics = useCallback(async () => {
-    if (!apiRef.current || !supportsOnAirApiRef.current || onAirInFlightRef.current) return;
+    if (!apiRef.current || !supportsOnAirApiRef.current || onAirInFlightRef.current || !enableOnAirStatus) return;
     onAirInFlightRef.current = true;
     try {
       const onAir = await apiRef.current.getOnAirGraphics();
@@ -145,7 +153,7 @@ export function useMosartConnection(serverConfig, { timelinePollMs = DEFAULT_TIM
     } finally {
       onAirInFlightRef.current = false;
     }
-  }, []);
+  }, [enableOnAirStatus]);
 
   /**
    * Fetch the timeline (current/next story).

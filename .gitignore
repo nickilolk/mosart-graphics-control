@@ -7,6 +7,7 @@ dist/
 # Runtime config — these are written by the app and contain site-specific
 # settings and credentials. Never commit them; use the .example files instead.
 settings.json
+servers.json
 config.json
 
 # Environment files
@@ -16,6 +17,7 @@ config.json
 
 # Editor / OS
 .vscode/
+.claude/
 .DS_Store
 Thumbs.db
 

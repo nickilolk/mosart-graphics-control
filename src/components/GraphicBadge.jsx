@@ -28,6 +28,8 @@ export default memo(function GraphicBadge({ gfx, isSelected, isOnAir = false, sh
     <div ref={badgeRef} style={{
       padding: '8px 10px', borderRadius: 6,
       border: isOnAir ? '2px solid #e53935' : isSelected ? '2px solid var(--accent)' : '2px solid var(--border)',
+      outline: isOnAir && isSelected ? '2px solid var(--accent)' : 'none',
+      outlineOffset: '-5px',
       background: isOnAir ? 'rgba(229,57,53,0.08)' : isSelected ? 'var(--surface-hover)' : 'var(--surface)',
       transition: 'all 0.1s', cursor: 'pointer',
       position: 'relative',

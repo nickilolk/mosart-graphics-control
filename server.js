@@ -24,7 +24,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, 'dist');
-const SERVERS_JSON = path.join(DIST_DIR, 'servers.json');
+const SERVERS_JSON = path.join(__dirname, 'servers.json');
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 const SETTINGS_FILE = path.join(__dirname, 'settings.json');
 

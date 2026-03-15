@@ -39,6 +39,9 @@ export default function App() {
   const [showContinueButton, setShowContinueButton] = useState(() => {
     try { return JSON.parse(localStorage.getItem('mosart-show-continuebutton') ?? 'false'); } catch { return false; }
   });
+  const [showOnAirStatus, setShowOnAirStatus] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('mosart-show-onairstatus') ?? 'true'); } catch { return true; }
+  });
 
   // Password gate state
   const [adminPasswordPrompt, setAdminPasswordPrompt] = useState(false);
@@ -121,6 +124,9 @@ export default function App() {
   const toggleShowContinueButton = useCallback(() => {
     setShowContinueButton(v => { const next = !v; try { localStorage.setItem('mosart-show-continuebutton', JSON.stringify(next)); } catch {} return next; });
   }, []);
+  const toggleShowOnAirStatus = useCallback(() => {
+    setShowOnAirStatus(v => { const next = !v; try { localStorage.setItem('mosart-show-onairstatus', JSON.stringify(next)); } catch {} return next; });
+  }, []);
 
   const vars = darkMode ? darkTheme : lightTheme;
 
@@ -169,6 +175,8 @@ export default function App() {
           onToggleShowThumbnails={toggleShowThumbnails}
           showContinueButton={showContinueButton}
           onToggleShowContinueButton={toggleShowContinueButton}
+          showOnAirStatus={showOnAirStatus}
+          onToggleShowOnAirStatus={toggleShowOnAirStatus}
           handlerConfig={settings.handlerConfig}
           pollConfig={settings.pollConfig}
           inactivityMinutes={settings.inactivityMinutes}

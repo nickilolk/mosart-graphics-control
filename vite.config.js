@@ -63,7 +63,7 @@ function serversApiPlugin() {
                   return;
                 }
               }
-              const filePath = path.resolve('public/servers.json');
+              const filePath = path.resolve('servers.json');
               fs.writeFileSync(filePath, JSON.stringify(servers, null, 2) + '\n', 'utf-8');
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ ok: true }));
@@ -74,7 +74,7 @@ function serversApiPlugin() {
           });
         } else if (req.method === 'GET') {
           try {
-            const filePath = path.resolve('public/servers.json');
+            const filePath = path.resolve('servers.json');
             const data = fs.readFileSync(filePath, 'utf-8');
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(data);
@@ -97,7 +97,7 @@ function serversApiPlugin() {
  */
 function loadAllowedHosts() {
   try {
-    const data = fs.readFileSync(path.resolve('public/servers.json'), 'utf-8');
+    const data = fs.readFileSync(path.resolve('servers.json'), 'utf-8');
     const servers = JSON.parse(data);
     return new Set(servers.map(s => s.host.toLowerCase()));
   } catch {

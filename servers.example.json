@@ -1,0 +1,9 @@
+[
+  {
+    "name": "My Mosart Server",
+    "host": "mosart-server-hostname",
+    "port": 55167,
+    "apiKey": "your-api-key",
+    "id": 1
+  }
+]
