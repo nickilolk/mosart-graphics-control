@@ -47,6 +47,24 @@ Once connected, you'll see all overlay graphics from the current rundown, groupe
 - The current on-air story is highlighted
 - **On Viz Mosart 5.14 and later:** graphics that are currently on air show a red border. This updates automatically — no configuration is needed.
 
+### Filtering the list
+
+A filter bar sits below the top bar. Use it to narrow the list to specific types of graphic without affecting the rundown. Available filters:
+
+- **Manual In / Auto In** — filter by whether the graphic fires manually or on a timecode
+- **Background End / Story End / Non-Auto Out** — filter by out behaviour
+- **Search box** — free-text filter on graphic slug
+
+Filters are additive within the type buttons. Click **Clear** to reset. The filter only affects the view — all graphics are still available to fire.
+
+### Personal collection
+
+Click the collection icon (split-panel button) in the top bar to open a side panel alongside the main list. You can drag graphics from the main list into your collection, or use the ⊕ button on each graphic.
+
+- Your collection is saved in the browser — it persists across sessions on the same machine
+- Press **Tab** to switch keyboard focus between the main list and the collection panel
+- All keyboard shortcuts (arrows, Take In/Out) work in the collection panel when it has focus
+
 ### Taking graphics in and out
 
 Each graphic has two buttons:
@@ -74,9 +92,13 @@ You can also use keyboard shortcuts (see below).
 
 Click the gear icon (top right when connected) to toggle display options:
 
+- **Dark/Light mode** — toggles the UI colour scheme
 - **Show Handler** — shows which graphics engine handles each graphic (DSK, WALL, etc.)
 - **Show Continue Points** — shows how many continue points a graphic has
 - **Show Continue Button** — adds a CONT button on graphics with continue points
+- **Show On-Air Status** — enables or disables the red border on on-air graphics (Mosart 5.14+ only). Turning this off stops the app from polling the on-air endpoint. On by default.
+
+All settings are saved per-user in the browser.
 
 ## Admin page
 
@@ -103,7 +125,7 @@ The application runs as a Windows Service on the designated server machine.
 | **Install path** | `C:\Program Files\Mosart Graphics Control\` |
 | **Windows Service name** | Mosart Graphics Control |
 | **Settings file** | `C:\Program Files\Mosart Graphics Control\settings.json` |
-| **Servers file** | `C:\Program Files\Mosart Graphics Control\dist\servers.json` |
+| **Servers file** | `C:\Program Files\Mosart Graphics Control\servers.json` |
 
 ## Configuration files
 
@@ -123,7 +145,7 @@ Located in the root of the install folder. Contains all shared settings:
 
 This file is written automatically by the Admin page. You can also edit it directly in a text editor if needed (e.g. to reset a lost admin password — set `adminPassword` back to `"1234"`).
 
-### dist\servers.json
+### servers.json
 
 Contains the Mosart server connection list. Also written by the Admin page. Each server entry needs:
 
@@ -153,7 +175,7 @@ The tool can't reach the Mosart server. Check that:
 - The correct Mosart server is selected
 - The Mosart server is running and reachable from the app server
 - Port 55167 is open on the Mosart server
-- The API key in `dist\servers.json` matches the one in Mosart's `RemoteDispatcherServiceConfig.xml`
+- The API key in `servers.json` matches the one in Mosart's `RemoteDispatcherServiceConfig.xml`
 
 **Graphics are showing but not updating**
 Try refreshing the browser. If the tab was in the background for a long time, Chrome may have throttled it — bringing it back to the foreground should trigger an immediate refresh.
@@ -174,7 +196,7 @@ The default password is `1234`. If the password has been changed and is lost, ed
 - On Viz Mosart 5.14+, on-air status is fetched from a dedicated endpoint and shown as a red border on the graphic
 - Poll intervals are configurable (default: timeline every 500ms, graphics every 1500ms)
 - All API calls are proxied through the Node.js server to avoid CORS issues
-- The proxy only allows connections to hostnames listed in `dist\servers.json`
+- The proxy only allows connections to hostnames listed in `servers.json`
 - Settings are stored centrally in `settings.json` — shared across all browsers
 
 ## Development and source code

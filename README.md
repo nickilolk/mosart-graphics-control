@@ -33,9 +33,9 @@ All configuration is done through the **Admin page** in the browser. Click the p
 | **Handlers** | Which graphics handlers to show and their badge colours |
 | **Security** | Application port, admin password |
 
-Settings are stored in `settings.json` (in the project root). Server connections are stored in `public/servers.json` (dev) or `dist/servers.json` (production). Both files are read and written by the server — you don't need to edit them manually.
+Settings are stored in `settings.json` (in the project root). Server connections are stored in `servers.json` (in the project root), read and written by the server — you don't need to edit them manually.
 
-> `settings.json` is excluded from the repo (it contains your admin password and site-specific config). A clean template is provided as `settings.example.json` — the app will use built-in defaults if `settings.json` doesn't exist yet.
+> `settings.json` and `servers.json` are excluded from the repo (they contain your admin password, API keys, and site-specific config). Clean templates are provided as `settings.example.json` and `servers.example.json` — the app will use built-in defaults if `settings.json` doesn't exist yet.
 
 ## Keyboard Shortcuts
 
@@ -73,9 +73,48 @@ src/
 
 server.js                      # Production server + API endpoints
 settings.json                  # Shared settings (station name, handlers, etc.)
-public/
-└── servers.json               # Mosart server connections
+servers.json                   # Mosart server connections
+servers.example.json           # Template for servers.json
 ```
+
+## UI Features
+
+### Filter bar
+
+A filter bar sits below the top bar and lets you narrow the graphics list without changing the rundown. You can combine filters freely:
+
+| Filter | What it shows |
+|---|---|
+| **Manual In** | Graphics that fire immediately (no timecode) |
+| **Auto In** | Graphics that fire on a timecode |
+| **Background End** | Graphics with BACKGROUNDEND out behaviour |
+| **Story End** | Graphics with STORYEND out behaviour |
+| **Non-Auto Out** | Graphics with MANUAL out behaviour |
+| **Search** | Free-text filter on graphic slug |
+
+Filters are OR-combined within the type buttons, and AND-combined with the text search. Click **Clear** to reset everything.
+
+### Collection panel
+
+Click the collection icon (split-panel icon in the top bar) to open a personal side panel alongside the main list. Drag any graphic from the main list into the panel, or use the ⊕ button on each graphic.
+
+- Persisted per-user in browser localStorage
+- Full keyboard navigation — press **Tab** to switch focus between the main list and the collection
+- All arrow key / Take In / Take Out shortcuts work in the collection panel when it has focus
+
+### Settings
+
+Click the gear icon (top right when connected) to access display toggles:
+
+| Toggle | Default | What it controls |
+|---|---|---|
+| **Dark/Light mode** | Dark | UI colour scheme |
+| **Show Handler** | Off | Shows which graphics engine handles each graphic |
+| **Show Continue Points** | Off | Shows how many continue points a graphic has |
+| **Show Continue Button** | Off | Adds a CONT button on graphics with continue points |
+| **Show On-Air Status** | On | Enables red border on on-air graphics (requires Mosart 5.14+). Disable to stop polling the on-air endpoint. |
+
+All toggles are persisted per-user in browser localStorage.
 
 ## Mosart API Endpoints Used
 

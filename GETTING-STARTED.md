@@ -111,7 +111,7 @@ All configuration is done through the **Admin page** inside the app — no need 
 4. After making changes, click **Save** in each section
 5. Click **Back** to return to the connect screen
 
-Settings are saved to `settings.json` in the project folder. Server connections are saved to `public/servers.json`. Both are picked up automatically — no restart needed.
+Settings are saved to `settings.json` in the project folder. Server connections are saved to `servers.json` in the same folder. Both are picked up automatically — no restart needed.
 
 ---
 
@@ -135,6 +135,7 @@ server.js
 package.json
 install-service.js
 settings.json
+servers.json
 dist/              (the entire folder)
 ```
 

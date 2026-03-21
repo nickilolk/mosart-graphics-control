@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useMosartConnection } from '../hooks/useMosartConnection.js';
 import { isVersionAtLeast, parseVersion } from '../services/mosartApi.js';
 import { FIXED_WIDTH } from '../styles/theme.js';
-import { KeyboardIcon, DisconnectIcon, SettingsIcon } from './Icons.jsx';
+import { KeyboardIcon, DisconnectIcon, SettingsIcon, CollectionIcon } from './Icons.jsx';
 import GraphicBadge from './GraphicBadge.jsx';
 import { ShortcutsModal, DisconnectModal } from './Modals.jsx';
 
@@ -28,7 +28,41 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showDisconnect, setShowDisconnect] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [collectionOpen, setCollectionOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState('main'); // 'main' | 'collection'
+  const [collectionSelectedIndex, setCollectionSelectedIndex] = useState(0);
+  const [collection, setCollection] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('mosart-collection') || '[]'); }
+    catch { return []; }
+  });
   const listRef = useRef(null);
+  const collectionListRef = useRef(null);
+
+  // Persist collection to localStorage
+  useEffect(() => {
+    localStorage.setItem('mosart-collection', JSON.stringify(collection));
+  }, [collection]);
+
+  // Reset to main panel when collection closes
+  useEffect(() => {
+    if (!collectionOpen) setActivePanel('main');
+  }, [collectionOpen]);
+
+  const addToCollection = useCallback((gfx) => {
+    setCollection(prev => prev.some(g => g.id === gfx.id) ? prev : [...prev, gfx]);
+  }, []);
+
+  const removeFromCollection = useCallback((id) => {
+    setCollection(prev => prev.filter(g => g.id !== id));
+  }, []);
+
+  const clearCollection = useCallback(() => setCollection([]), []);
+
+  const [filters, setFilters] = useState({ manualIn: false, autoIn: false, backgroundEnd: false, storyEnd: false, nonAutoOut: false });
+  const [searchText, setSearchText] = useState('');
+  const toggleFilter = useCallback((key) => setFilters(prev => ({ ...prev, [key]: !prev[key] })), []);
+  const clearFilters = useCallback(() => { setFilters({ manualIn: false, autoIn: false, backgroundEnd: false, storyEnd: false, nonAutoOut: false }); setSearchText(''); }, []);
+  const hasActiveFilters = Object.values(filters).some(Boolean) || searchText.trim() !== '';
 
   // Build a map of handlerName → configured color (only when handlers are configured)
   const handlerColorMap = useMemo(() => {
@@ -44,11 +78,27 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     return graphics.filter(g => handlerColorMap.has(g.handlerName));
   }, [graphics, handlerColorMap]);
 
-  // Group graphics by story for rendering (Map preserves insertion order
-  // and merges non-contiguous graphics from the same story into one group)
+  // Apply type toggles + text search on top of handler filtering
+  const displayedGraphics = useMemo(() => {
+    let result = filteredGraphics;
+    const active = [];
+    if (filters.manualIn)      active.push(g => !g.fields?.find(f => f.name === 'tc_in')?.value);
+    if (filters.autoIn)        active.push(g => !!g.fields?.find(f => f.name === 'tc_in')?.value);
+    if (filters.backgroundEnd) active.push(g => g.graphicType === 'BACKGROUNDEND');
+    if (filters.storyEnd)      active.push(g => g.graphicType === 'STORYEND');
+    if (filters.nonAutoOut)    active.push(g => g.graphicType === 'MANUAL');
+    if (active.length > 0) result = result.filter(g => active.some(fn => fn(g)));
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase();
+      result = result.filter(g => g.slug?.toLowerCase().includes(q));
+    }
+    return result;
+  }, [filteredGraphics, filters, searchText]);
+
+  // Group graphics by story for rendering
   const { storyGroups, visualOrder } = useMemo(() => {
     const groupMap = new Map();
-    filteredGraphics.forEach((gfx) => {
+    displayedGraphics.forEach((gfx) => {
       let group = groupMap.get(gfx.storyId);
       if (!group) {
         group = { storyId: gfx.storyId, storySlug: gfx.storySlug, storyPageNumber: gfx.storyPageNumber, items: [] };
@@ -57,28 +107,21 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
       group.items.push(gfx);
     });
     const groups = [...groupMap.values()];
-    // Flat list in visual (grouped) order — selectedIndex indexes into this
     const order = groups.flatMap(g => g.items);
     return { storyGroups: groups, visualOrder: order };
-  }, [filteredGraphics]);
+  }, [displayedGraphics]);
 
-  // Cue to first graphic in the current on-air story.
-  // If the current story has no graphics, find the nearest previous story that does.
   const cueToOnAirStory = useCallback(() => {
     if (!timeline?.currentStory?.id) return;
 
     let targetIdx = visualOrder.findIndex(g => g.storyId === timeline.currentStory.id);
 
     if (targetIdx < 0) {
-      // Current story has no graphics — find the closest preceding story with graphics.
       const currentRundownIdx = getStoryRundownIndex(timeline.currentStory.id);
       if (currentRundownIdx >= 0) {
-        // Walk backwards through visualOrder to find the last graphic whose story
-        // is at or before the current story in the rundown.
         let bestFirst = -1;
         for (let i = visualOrder.length - 1; i >= 0; i--) {
           if (visualOrder[i].storyIndex <= currentRundownIdx) {
-            // Found a graphic before/at current position — find the first graphic in that story
             const storyId = visualOrder[i].storyId;
             bestFirst = visualOrder.findIndex(g => g.storyId === storyId);
             break;
@@ -103,20 +146,44 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     const handler = (e) => {
       if (showShortcuts || showDisconnect || showSettings) return;
 
+      if (e.key === 'Tab' && collectionOpen) {
+        e.preventDefault();
+        setActivePanel(prev => prev === 'main' ? 'collection' : 'main');
+        return;
+      }
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedIndex(prev => Math.min(prev + 1, visualOrder.length - 1));
+        if (activePanel === 'collection') {
+          setCollectionSelectedIndex(prev => Math.min(prev + 1, collection.length - 1));
+        } else {
+          setSelectedIndex(prev => Math.min(prev + 1, visualOrder.length - 1));
+        }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedIndex(prev => Math.max(prev - 1, 0));
+        if (activePanel === 'collection') {
+          setCollectionSelectedIndex(prev => Math.max(prev - 1, 0));
+        } else {
+          setSelectedIndex(prev => Math.max(prev - 1, 0));
+        }
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        const gfx = visualOrder[selectedIndex];
-        if (gfx) takeIn(gfx.id);
+        if (activePanel === 'collection') {
+          const gfx = collection[collectionSelectedIndex];
+          if (gfx) takeIn(gfx.id);
+        } else {
+          const gfx = visualOrder[selectedIndex];
+          if (gfx) takeIn(gfx.id);
+        }
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        const gfx = visualOrder[selectedIndex];
-        if (gfx) takeOut(gfx.id);
+        if (activePanel === 'collection') {
+          const gfx = collection[collectionSelectedIndex];
+          if (gfx) takeOut(gfx.id);
+        } else {
+          const gfx = visualOrder[selectedIndex];
+          if (gfx) takeOut(gfx.id);
+        }
       } else if (e.key === 'Escape') {
         e.preventDefault();
         takeAllOut(handlerConfig?.map(h => h.name) ?? []);
@@ -125,10 +192,18 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
         cueToOnAirStory();
       } else if (e.key === 'Home') {
         e.preventDefault();
-        setSelectedIndex(0);
+        if (activePanel === 'collection') {
+          setCollectionSelectedIndex(0);
+        } else {
+          setSelectedIndex(0);
+        }
       } else if (e.key === 'End') {
         e.preventDefault();
-        setSelectedIndex(visualOrder.length - 1);
+        if (activePanel === 'collection') {
+          setCollectionSelectedIndex(Math.max(0, collection.length - 1));
+        } else {
+          setSelectedIndex(visualOrder.length - 1);
+        }
       } else if (e.key === 'PageDown') {
         e.preventDefault();
         continueGraphic();
@@ -139,7 +214,7 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [visualOrder, selectedIndex, showShortcuts, showDisconnect, showSettings, takeIn, takeOut, takeAllOut, continueGraphic, cueToOnAirStory, onToggleDarkMode, handlerConfig]);
+  }, [visualOrder, selectedIndex, collection, collectionSelectedIndex, activePanel, collectionOpen, showShortcuts, showDisconnect, showSettings, takeIn, takeOut, takeAllOut, continueGraphic, cueToOnAirStory, onToggleDarkMode, handlerConfig]);
 
   // Inactivity auto-logout
   useEffect(() => {
@@ -159,13 +234,21 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     };
   }, [inactivityMinutes, onDisconnect]);
 
-  // Scroll selected item into view
+  // Scroll selected item into view — main list
   useEffect(() => {
     if (listRef.current) {
       const el = listRef.current.querySelector(`[data-index="${selectedIndex}"]`);
       if (el) el.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     }
   }, [selectedIndex]);
+
+  // Scroll selected item into view — collection
+  useEffect(() => {
+    if (collectionListRef.current) {
+      const el = collectionListRef.current.querySelector(`[data-collection-index="${collectionSelectedIndex}"]`);
+      if (el) el.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    }
+  }, [collectionSelectedIndex]);
 
   // Clamp selectedIndex when graphics list changes
   useEffect(() => {
@@ -174,176 +257,410 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     }
   }, [visualOrder.length, selectedIndex]);
 
-  // Connection status color
+  // Clamp collectionSelectedIndex when collection changes
+  useEffect(() => {
+    if (collectionSelectedIndex >= collection.length && collection.length > 0) {
+      setCollectionSelectedIndex(collection.length - 1);
+    }
+  }, [collection.length, collectionSelectedIndex]);
+
   const statusDotColor =
     connectionStatus === 'connected' ? '#4caf50' :
     connectionStatus === 'connecting' ? '#ff9800' : '#e53935';
 
-  // Track the visual index as we render story groups
+  const handleCollectionDrop = useCallback((e) => {
+    const id = e.dataTransfer.getData('text/plain');
+    const gfx = filteredGraphics.find(g => g.id === id);
+    if (gfx) addToCollection({ ...gfx });
+  }, [filteredGraphics, addToCollection]);
+
   let visualIdx = 0;
 
   return (
-    <div style={{ width: FIXED_WIDTH, margin: '0 auto', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* ===== TOP BAR ===== */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 12px', borderBottom: '1px solid var(--border)',
-        background: 'var(--surface)', flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 8, height: 8, borderRadius: '50%', background: statusDotColor,
-            boxShadow: connectionStatus === 'connected' ? '0 0 6px rgba(76,175,80,0.5)' : 'none',
-          }} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{server.name}</span>
-          <span style={{
-            fontSize: 11, padding: '2px 6px', borderRadius: 3, fontWeight: 600,
-            background: timeline?.status === 'Running' ? 'rgba(76,175,80,0.15)' : 'rgba(255,152,0,0.15)',
-            color: timeline?.status === 'Running' ? '#4caf50' : '#ff9800',
-          }}>
-            {timeline?.status || connectionStatus}
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {displayVersion && (
-            <span style={{ fontSize: 12, fontWeight: 700, marginRight: 4, color: isVersionAtLeast(buildVersion, '5.13.0') ? '#4caf50' : '#e53935' }} title={`Mosart ${buildVersion}`}>
-              {displayVersion}
-            </span>
-          )}
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowSettings(v => !v)}
-              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, height: 28, padding: '0 6px', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center' }}
-              title="Settings">
-              <SettingsIcon />
-            </button>
-            {showSettings && (
-              <>
-                <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowSettings(false)} />
-                <div style={{
-                  position: 'absolute', top: 34, right: 0, width: 200,
-                  background: 'var(--bg)', border: '1px solid var(--border)',
-                  borderRadius: 8, padding: 6, zIndex: 50,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                }}>
-                  <ThemeSwitch darkMode={darkMode} onToggle={onToggleDarkMode} />
-                  <SettingsToggle label="Show Handler" checked={showHandler} onChange={onToggleShowHandler} />
-                  <SettingsToggle label="Show Continue Points" checked={showContinuePoints} onChange={onToggleShowContinuePoints} />
-                  <SettingsToggle label="Show Continue Button" checked={showContinueButton} onChange={onToggleShowContinueButton} />
-                  <SettingsToggle label="Show On-Air Status" checked={showOnAirStatus} onChange={onToggleShowOnAirStatus} />
-                  {/* TODO: Re-enable once Preview Server thumbnails are tested on-network */}
-                  {/* <SettingsToggle label="Show Thumbnails" checked={showThumbnails} onChange={onToggleShowThumbnails} /> */}
-                </div>
-              </>
-            )}
-          </div>
-          <button onClick={() => setShowShortcuts(true)}
-            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, height: 28, padding: '0 6px', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center' }}
-            title="Keyboard Shortcuts">
-            <KeyboardIcon />
-          </button>
-          <button onClick={() => setShowDisconnect(true)}
-            style={{ background: 'rgba(229,57,53,0.1)', border: '1px solid rgba(229,57,53,0.3)', borderRadius: 4, height: 28, padding: '0 8px', cursor: 'pointer', color: '#e53935', display: 'flex', alignItems: 'center', fontFamily: 'inherit' }}>
-            <DisconnectIcon />
-          </button>
-        </div>
-      </div>
+    <div style={{ width: collectionOpen ? FIXED_WIDTH * 2 + 1 : FIXED_WIDTH, margin: '0 auto', height: '100vh', display: 'flex', flexDirection: 'row', transition: 'width 0.2s ease' }}>
 
-      {/* ===== ERROR BANNER ===== */}
-      {error && (
+      {/* ===== MAIN PANEL ===== */}
+      <div style={{ width: FIXED_WIDTH, flexShrink: 0, display: 'flex', flexDirection: 'column', height: '100vh' }}>
+
+        {/* ===== TOP BAR ===== */}
         <div style={{
-          padding: '6px 12px', background: 'rgba(229,57,53,0.1)',
-          borderBottom: '1px solid rgba(229,57,53,0.3)',
-          fontSize: 11, color: '#e53935', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '8px 12px', borderBottom: '1px solid var(--border)',
+          background: 'var(--surface)', flexShrink: 0,
         }}>
-          <span>{error}</span>
-          <button onClick={dismissError} style={{
-            background: 'none', border: 'none', color: '#e53935', cursor: 'pointer',
-            fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0, fontFamily: 'inherit',
-          }} title="Dismiss">✕</button>
-        </div>
-      )}
-
-      {/* ===== FIXED TOP: On-Air Story Info ===== */}
-      <div style={{ padding: '8px 12px', flexShrink: 0 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-dim)',
-        }}>
-          <span>ON AIR:</span>
-          <span style={{ color: '#fdd835', fontWeight: 600, letterSpacing: 0.5, textTransform: 'none', fontSize: 12 }}>
-            {timeline?.currentStory?.slug || '—'}
-          </span>
-        </div>
-      </div>
-
-      {/* ===== SCROLLABLE GRAPHICS LIST ===== */}
-      <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {filteredGraphics.length === 0 && connectionStatus === 'connected' && (
-          <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
-            No overlay graphics in the current rundown.
-          </div>
-        )}
-        {filteredGraphics.length === 0 && connectionStatus === 'connecting' && (
-          <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
-            Connecting to {server.name}...
-          </div>
-        )}
-        {storyGroups.map((group, gi) => {
-          const isCurrentStory = group.storyId === timeline?.currentStory?.id;
-          const groupStartIdx = visualIdx;
-          return (
-            <div key={group.storyId || gi} data-story={group.storyId} style={{
-              background: isCurrentStory ? 'rgba(253, 216, 53, 0.13)' : 'transparent',
-              borderRadius: isCurrentStory ? 6 : 0,
-              padding: isCurrentStory ? '2px 6px 6px' : '0',
-              marginTop: gi > 0 ? 4 : 0,
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%', background: statusDotColor,
+              boxShadow: connectionStatus === 'connected' ? '0 0 6px rgba(76,175,80,0.5)' : 'none',
+            }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{server.name}</span>
+            <span style={{
+              fontSize: 11, padding: '2px 6px', borderRadius: 3, fontWeight: 600,
+              background: timeline?.status === 'Running' ? 'rgba(76,175,80,0.15)' : 'rgba(255,152,0,0.15)',
+              color: timeline?.status === 'Running' ? '#4caf50' : '#ff9800',
             }}>
-              <div style={{
-                fontSize: 11, color: isCurrentStory ? '#fdd835' : 'var(--text-dim)',
-                padding: '6px 4px 3px', fontWeight: isCurrentStory ? 700 : 400,
-                letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 4,
-                borderTop: gi > 0 && !isCurrentStory ? '1px solid var(--border)' : 'none',
-              }}>
-                {isCurrentStory && <span style={{ fontSize: 6 }}>●</span>}
-                {group.storyPageNumber && <span style={{
-                  fontSize: 10, fontWeight: 600, color: isCurrentStory ? '#fdd835' : '#fff',
-                  background: isCurrentStory ? 'rgba(253,216,53,0.15)' : 'rgba(255,255,255,0.08)',
-                  padding: '1px 5px', borderRadius: 3, minWidth: 20, textAlign: 'center',
-                }}>{group.storyPageNumber}</span>}
-                {group.storySlug}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {group.items.map((gfx, itemIdx) => {
-                  const vi = groupStartIdx + itemIdx;
-                  visualIdx = vi + 1;
-                  return (
-                    <div key={gfx.id} data-index={vi} onClick={() => setSelectedIndex(vi)}>
-                      <GraphicBadge
-                        gfx={gfx}
-                        isSelected={selectedIndex === vi}
-                        isOnAir={onAirIds.has(gfx.id)}
-                        showHandler={showHandler}
-                        showContinuePoints={showContinuePoints}
-                        showContinueButton={showContinueButton}
-                        showThumbnails={showThumbnails}
-                        onTakeIn={takeIn}
-                        onTakeOut={takeOut}
-                        onContinue={continueGraphic}
-                        handlerColor={handlerColorMap?.get(gfx.handlerName)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+              {timeline?.status || connectionStatus}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {displayVersion && (
+              <span style={{ fontSize: 12, fontWeight: 700, marginRight: 4, color: isVersionAtLeast(buildVersion, '5.13.0') ? '#4caf50' : '#e53935' }} title={`Mosart ${buildVersion}`}>
+                {displayVersion}
+              </span>
+            )}
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setShowSettings(v => !v)}
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, height: 28, padding: '0 6px', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center' }}
+                title="Settings">
+                <SettingsIcon />
+              </button>
+              {showSettings && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setShowSettings(false)} />
+                  <div style={{
+                    position: 'absolute', top: 34, right: 0, width: 200,
+                    background: 'var(--bg)', border: '1px solid var(--border)',
+                    borderRadius: 8, padding: 6, zIndex: 50,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  }}>
+                    <ThemeSwitch darkMode={darkMode} onToggle={onToggleDarkMode} />
+                    <SettingsToggle label="Show Handler" checked={showHandler} onChange={onToggleShowHandler} />
+                    <SettingsToggle label="Show Continue Points" checked={showContinuePoints} onChange={onToggleShowContinuePoints} />
+                    <SettingsToggle label="Show Continue Button" checked={showContinueButton} onChange={onToggleShowContinueButton} />
+                    <SettingsToggle label="Show On-Air Status" checked={showOnAirStatus} onChange={onToggleShowOnAirStatus} />
+                    {/* TODO: Re-enable once Preview Server thumbnails are tested on-network */}
+                    {/* <SettingsToggle label="Show Thumbnails" checked={showThumbnails} onChange={onToggleShowThumbnails} /> */}
+                  </div>
+                </>
+              )}
             </div>
-          );
-        })}
-      </div>
+            <button onClick={() => setShowShortcuts(true)}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, height: 28, padding: '0 6px', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center' }}
+              title="Keyboard Shortcuts">
+              <KeyboardIcon />
+            </button>
+            <button
+              onClick={() => setCollectionOpen(v => !v)}
+              style={{ background: collectionOpen ? 'rgba(91,155,213,0.15)' : 'none', border: '1px solid var(--border)', borderRadius: 4, height: 28, padding: '0 6px', cursor: 'pointer', color: collectionOpen ? 'var(--accent)' : 'var(--text-dim)', display: 'flex', alignItems: 'center' }}
+              title={collectionOpen ? 'Close Personal Collection' : 'Open Personal Collection'}>
+              <CollectionIcon />
+            </button>
+            <button onClick={() => setShowDisconnect(true)}
+              style={{ background: 'rgba(229,57,53,0.1)', border: '1px solid rgba(229,57,53,0.3)', borderRadius: 4, height: 28, padding: '0 8px', cursor: 'pointer', color: '#e53935', display: 'flex', alignItems: 'center', fontFamily: 'inherit' }}>
+              <DisconnectIcon />
+            </button>
+          </div>
+        </div>
+
+        {/* ===== ERROR BANNER ===== */}
+        {error && (
+          <div style={{
+            padding: '6px 12px', background: 'rgba(229,57,53,0.1)',
+            borderBottom: '1px solid rgba(229,57,53,0.3)',
+            fontSize: 11, color: '#e53935', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          }}>
+            <span>{error}</span>
+            <button onClick={dismissError} style={{
+              background: 'none', border: 'none', color: '#e53935', cursor: 'pointer',
+              fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0, fontFamily: 'inherit',
+            }} title="Dismiss">✕</button>
+          </div>
+        )}
+
+        {/* ===== FILTER BAR ===== */}
+        <FilterBar filters={filters} onToggle={toggleFilter} searchText={searchText} onSearchChange={setSearchText} hasActive={hasActiveFilters} onClear={clearFilters} />
+
+        {/* ===== FIXED TOP: On-Air Story Info ===== */}
+        <div style={{ padding: '8px 12px', flexShrink: 0 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', color: 'var(--text-dim)',
+          }}>
+            <span>ON AIR:</span>
+            <span style={{ color: '#fdd835', fontWeight: 600, letterSpacing: 0.5, textTransform: 'none', fontSize: 12 }}>
+              {timeline?.currentStory?.slug || '—'}
+            </span>
+          </div>
+        </div>
+
+        {/* ===== SCROLLABLE GRAPHICS LIST ===== */}
+        <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {filteredGraphics.length === 0 && connectionStatus === 'connected' && (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+              No overlay graphics in the current rundown.
+            </div>
+          )}
+          {filteredGraphics.length === 0 && connectionStatus === 'connecting' && (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+              Connecting to {server.name}...
+            </div>
+          )}
+          {filteredGraphics.length > 0 && displayedGraphics.length === 0 && (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+              No graphics match the current filters.
+            </div>
+          )}
+          {storyGroups.map((group, gi) => {
+            const isCurrentStory = group.storyId === timeline?.currentStory?.id;
+            const groupStartIdx = visualIdx;
+            return (
+              <div key={group.storyId || gi} data-story={group.storyId} style={{
+                background: isCurrentStory ? 'rgba(253, 216, 53, 0.13)' : 'transparent',
+                borderRadius: isCurrentStory ? 6 : 0,
+                padding: isCurrentStory ? '2px 6px 6px' : '0',
+                marginTop: gi > 0 ? 4 : 0,
+              }}>
+                <div style={{
+                  fontSize: 11, color: isCurrentStory ? '#fdd835' : 'var(--text-dim)',
+                  padding: '6px 4px 3px', fontWeight: isCurrentStory ? 700 : 400,
+                  letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 4,
+                  borderTop: gi > 0 && !isCurrentStory ? '1px solid var(--border)' : 'none',
+                }}>
+                  {isCurrentStory && <span style={{ fontSize: 6 }}>●</span>}
+                  {group.storyPageNumber && <span style={{
+                    fontSize: 10, fontWeight: 600, color: isCurrentStory ? '#fdd835' : '#fff',
+                    background: isCurrentStory ? 'rgba(253,216,53,0.15)' : 'rgba(255,255,255,0.08)',
+                    padding: '1px 5px', borderRadius: 3, minWidth: 20, textAlign: 'center',
+                  }}>{group.storyPageNumber}</span>}
+                  {group.storySlug}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {group.items.map((gfx, itemIdx) => {
+                    const vi = groupStartIdx + itemIdx;
+                    visualIdx = vi + 1;
+                    return (
+                      <div
+                        key={gfx.id}
+                        data-index={vi}
+                        onClick={() => { setActivePanel('main'); setSelectedIndex(vi); }}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', gfx.id);
+                          e.dataTransfer.effectAllowed = 'copy';
+                        }}
+                        style={{ cursor: 'grab' }}
+                      >
+                        <GraphicBadge
+                          gfx={gfx}
+                          isSelected={activePanel === 'main' && selectedIndex === vi}
+                          isOnAir={onAirIds.has(gfx.id)}
+                          showHandler={showHandler}
+                          showContinuePoints={showContinuePoints}
+                          showContinueButton={showContinueButton}
+                          showThumbnails={showThumbnails}
+                          onTakeIn={takeIn}
+                          onTakeOut={takeOut}
+                          onContinue={continueGraphic}
+                          handlerColor={handlerColorMap?.get(gfx.handlerName)}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+      </div>{/* end main panel */}
+
+      {/* ===== PERSONAL COLLECTION PANEL ===== */}
+      {collectionOpen && (
+        <PersonalCollection
+          collection={collection}
+          onAirIds={onAirIds}
+          onRemove={removeFromCollection}
+          onClear={clearCollection}
+          onTakeIn={takeIn}
+          onTakeOut={takeOut}
+          onContinue={continueGraphic}
+          onDrop={handleCollectionDrop}
+          onSelectItem={(i) => { setActivePanel('collection'); setCollectionSelectedIndex(i); }}
+          selectedIndex={activePanel === 'collection' ? collectionSelectedIndex : -1}
+          listRef={collectionListRef}
+          showHandler={showHandler}
+          showContinuePoints={showContinuePoints}
+          showContinueButton={showContinueButton}
+          showThumbnails={showThumbnails}
+          handlerColorMap={handlerColorMap}
+        />
+      )}
 
       {/* ===== MODALS ===== */}
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
       {showDisconnect && <DisconnectModal serverName={server.name} onConfirm={onDisconnect} onCancel={() => setShowDisconnect(false)} />}
+    </div>
+  );
+}
+
+function PersonalCollection({ collection, onAirIds, onRemove, onClear, onTakeIn, onTakeOut, onContinue, onDrop, onSelectItem, selectedIndex, listRef, showHandler, showContinuePoints, showContinueButton, showThumbnails, handlerColorMap }) {
+  const [dragOver, setDragOver] = useState(false);
+
+  return (
+    <div style={{
+      width: FIXED_WIDTH, flexShrink: 0, borderLeft: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column', height: '100vh',
+      background: 'var(--bg)',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 12px', borderBottom: '1px solid var(--border)',
+        background: 'var(--surface)', flexShrink: 0, height: 45, boxSizing: 'border-box',
+      }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: 0.3 }}>
+          Personal Collection
+        </span>
+        {collection.length > 0 && (
+          <button onClick={onClear} style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)',
+            fontSize: 11, padding: '2px 4px', fontFamily: 'inherit',
+          }} title="Clear all">
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {/* Drop zone / Items */}
+      <div
+        ref={listRef}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); onDrop(e); }}
+        style={{
+          flex: 1, overflowY: 'auto', padding: '8px 12px 12px',
+          display: 'flex', flexDirection: 'column', gap: 4,
+          outline: dragOver ? '2px dashed var(--accent)' : '2px dashed transparent',
+          outlineOffset: '-6px',
+          borderRadius: 4,
+          transition: 'outline-color 0.1s',
+          background: dragOver ? 'rgba(91,155,213,0.04)' : 'transparent',
+        }}>
+        {collection.length === 0 && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            height: '100%', gap: 8, color: 'var(--text-dim)', textAlign: 'center', pointerEvents: 'none',
+          }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+            <span style={{ fontSize: 12 }}>Drag graphics here</span>
+          </div>
+        )}
+        {collection.map((gfx, i) => (
+          <div
+            key={gfx.id}
+            data-collection-index={i}
+            onClick={() => onSelectItem(i)}
+            style={{ position: 'relative' }}
+          >
+            <GraphicBadge
+              gfx={gfx}
+              isSelected={selectedIndex === i}
+              isOnAir={onAirIds.has(gfx.id)}
+              showHandler={showHandler}
+              showContinuePoints={showContinuePoints}
+              showContinueButton={showContinueButton}
+              showThumbnails={showThumbnails}
+              onTakeIn={onTakeIn}
+              onTakeOut={onTakeOut}
+              onContinue={onContinue}
+              handlerColor={handlerColorMap?.get(gfx.handlerName)}
+            />
+            <button
+              onClick={(e) => { e.stopPropagation(); onRemove(gfx.id); }}
+              title="Remove from collection"
+              style={{
+                position: 'absolute', top: 4, right: 4,
+                background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: '50%',
+                width: 16, height: 16, cursor: 'pointer', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, lineHeight: 1, padding: 0, fontFamily: 'inherit',
+              }}>
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FilterBar({ filters, onToggle, searchText, onSearchChange, hasActive, onClear }) {
+  const textBadge = (active) => ({
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    minWidth: 32, height: 18, borderRadius: 3, padding: '0 4px',
+    border: 'none', cursor: 'pointer', background: '#f7dd72',
+    fontSize: 9, fontWeight: 700, color: '#000', fontFamily: 'inherit',
+    opacity: active ? 1 : 0.38,
+    outline: active ? '2px solid rgba(197,168,0,0.7)' : '2px solid transparent',
+    outlineOffset: 1,
+    transition: 'opacity 0.12s, outline-color 0.12s',
+  });
+  const iconBadge = (active) => ({
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end',
+    width: 32, height: 18, borderRadius: 3, padding: '0 3px',
+    border: 'none', cursor: 'pointer', background: '#f7dd72', fontFamily: 'inherit',
+    opacity: active ? 1 : 0.38,
+    outline: active ? '2px solid rgba(197,168,0,0.7)' : '2px solid transparent',
+    outlineOffset: 1,
+    transition: 'opacity 0.12s, outline-color 0.12s',
+  });
+
+  return (
+    <div style={{
+      padding: '6px 12px', borderBottom: '1px solid var(--border)',
+      background: 'var(--surface)', flexShrink: 0,
+      display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap',
+    }}>
+      {/* Manual In */}
+      <button onClick={() => onToggle('manualIn')} style={textBadge(filters.manualIn)} title="Manual In">
+        MNL
+      </button>
+
+      {/* Auto In */}
+      <button onClick={() => onToggle('autoIn')} style={textBadge(filters.autoIn)} title="Auto In">
+        AUTO
+      </button>
+
+      {/* Background End */}
+      <button onClick={() => onToggle('backgroundEnd')} style={iconBadge(filters.backgroundEnd)} title="Background End">
+        <svg width="8" height="8"><rect x="0.5" y="0.5" width="7" height="7" fill="none" stroke="#000" strokeWidth="1" /></svg>
+      </button>
+
+      {/* Story End */}
+      <button onClick={() => onToggle('storyEnd')} style={iconBadge(filters.storyEnd)} title="Story End">
+        <svg width="8" height="8"><rect width="8" height="8" fill="#000" /></svg>
+      </button>
+
+      {/* Non Auto Out (Manual out) */}
+      <button onClick={() => onToggle('nonAutoOut')} style={iconBadge(filters.nonAutoOut)} title="Non Auto Out">
+        <svg width="9" height="8"><line x1="0" y1="1" x2="9" y2="1" stroke="#000" strokeWidth="1.5" /><line x1="0" y1="4" x2="9" y2="4" stroke="#000" strokeWidth="1.5" /><line x1="0" y1="7" x2="9" y2="7" stroke="#000" strokeWidth="1.5" /></svg>
+      </button>
+
+      {/* Divider */}
+      <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+      {/* Text search */}
+      <input
+        type="text"
+        value={searchText}
+        onChange={e => onSearchChange(e.target.value)}
+        placeholder="Search…"
+        style={{
+          flex: 1, minWidth: 80, height: 22, padding: '0 7px',
+          background: 'var(--bg)', border: '1px solid var(--border)',
+          borderRadius: 3, color: 'var(--text-primary)', fontSize: 11,
+          fontFamily: 'inherit', outline: 'none',
+        }}
+      />
+
+      {/* Clear */}
+      {hasActive && (
+        <button onClick={onClear} style={{
+          background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)',
+          fontSize: 11, padding: '0 2px', fontFamily: 'inherit', flexShrink: 0,
+        }} title="Clear filters">✕</button>
+      )}
     </div>
   );
 }

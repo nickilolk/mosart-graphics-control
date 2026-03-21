@@ -11,6 +11,7 @@ export function ShortcutsModal({ onClose }) {
     { keys: 'Ctrl + D', action: 'Toggle dark/light mode' },
     { keys: 'Home', action: 'Jump to first graphic' },
     { keys: 'End', action: 'Jump to last graphic' },
+    { keys: 'Tab', action: 'Switch focus between main list and collection' },
   ];
 
   return (
