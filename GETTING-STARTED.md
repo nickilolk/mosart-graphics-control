@@ -101,11 +101,12 @@ All configuration is done through the **Admin page** inside the app — no need 
 
 1. On the connect screen, click the **padlock icon** (bottom right)
 2. Enter the admin password — the default is **1234**
-3. You'll see four tabs:
+3. You'll see five tabs:
 
    - **General** — Set your TV station name, adjust poll intervals, set inactivity timeout
    - **Servers** — Add your Mosart server connections (hostname, port, API key)
    - **Handlers** — Configure which graphics handlers to show and their colours
+   - **Direct Takes** — Configure direct take buttons shown at the bottom of the control view (recall number, name, optional keyboard shortcut)
    - **Security** — Change the application port or admin password
 
 4. After making changes, click **Save** in each section

@@ -86,7 +86,20 @@ You can also use keyboard shortcuts (see below).
 | Space | Jump to the current on-air story |
 | Home | Jump to first graphic |
 | End | Jump to last graphic |
+| Tab | Switch focus between main list and collection panel |
 | Ctrl + D | Toggle dark/light mode |
+| Ctrl + F | Focus the search/filter bar (Escape to return) |
+| *(custom)* | Trigger a direct take — each configured take can have its own shortcut assigned |
+
+Press the keyboard icon in the top bar to see the full list of shortcuts, including any direct take shortcuts you have configured.
+
+### Direct Takes
+
+If direct takes are configured, a row of buttons appears at the bottom of the control view. Each button triggers a specific direct take in Mosart when clicked, or when its assigned keyboard shortcut is pressed.
+
+Buttons fill the available width — one button fills the full row, two share it equally, three share it in thirds. A fourth button starts a new row below.
+
+Direct takes are configured by an admin in the Admin page (see below). The deck can be hidden using **Show Direct Takes** in the settings dropdown.
 
 ### Settings
 
@@ -97,6 +110,7 @@ Click the gear icon (top right when connected) to toggle display options:
 - **Show Continue Points** — shows how many continue points a graphic has
 - **Show Continue Button** — adds a CONT button on graphics with continue points
 - **Show On-Air Status** — enables or disables the red border on on-air graphics (Mosart 5.14+ only). Turning this off stops the app from polling the on-air endpoint. On by default.
+- **Show Direct Takes** — shows or hides the direct takes button deck at the bottom. Only appears if direct takes are configured.
 
 All settings are saved per-user in the browser.
 
@@ -104,14 +118,25 @@ All settings are saved per-user in the browser.
 
 Click the **padlock icon** on the connect screen to access the Admin page. The default password is **1234**.
 
-The Admin page has four tabs:
+The Admin page has five tabs:
 
 | Tab | What you can configure |
 |---|---|
 | **General** | TV station name (shown on the connect screen), poll intervals, inactivity timeout |
 | **Servers** | Mosart server connections |
 | **Handlers** | Which graphics handlers are shown, and their badge colours |
+| **Direct Takes** | Direct take buttons shown in the control view |
 | **Security** | Application port, admin password |
+
+#### Configuring Direct Takes
+
+In the **Direct Takes** tab, each entry has:
+
+- **Recall number** — the number sent to Mosart to identify the direct take
+- **Name** — the label shown on the button in the control view
+- **Shortcut** — an optional keyboard shortcut. Click the shortcut field and press the desired key combination. The app will warn you if it conflicts with an existing system shortcut or another direct take. Click the × badge to clear a shortcut.
+
+Entries without a shortcut still appear as clickable buttons in the deck.
 
 All settings are shared — changes made on one machine are immediately visible to all other users.
 
@@ -137,6 +162,7 @@ Located in the root of the install folder. Contains all shared settings:
 {
   "stationName": "Your Station",
   "handlerConfig": [...],
+  "directTakesConfig": [...],
   "pollConfig": { "timelineMs": 500, "graphicsMs": 1500 },
   "inactivityMinutes": 15,
   "adminPassword": "your-password"
