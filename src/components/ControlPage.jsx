@@ -6,7 +6,7 @@ import { KeyboardIcon, DisconnectIcon, SettingsIcon, CollectionIcon } from './Ic
 import GraphicBadge from './GraphicBadge.jsx';
 import { ShortcutsModal, DisconnectModal } from './Modals.jsx';
 
-export default function ControlPage({ server, onDisconnect, darkMode, onToggleDarkMode, showHandler, onToggleShowHandler, showContinuePoints, onToggleShowContinuePoints, showThumbnails, onToggleShowThumbnails, showContinueButton, onToggleShowContinueButton, showOnAirStatus, onToggleShowOnAirStatus, handlerConfig, pollConfig, inactivityMinutes }) {
+export default function ControlPage({ server, onDisconnect, darkMode, onToggleDarkMode, showHandler, onToggleShowHandler, showContinuePoints, onToggleShowContinuePoints, showThumbnails, onToggleShowThumbnails, showContinueButton, onToggleShowContinueButton, showOnAirStatus, onToggleShowOnAirStatus, showDirectTakes, onToggleShowDirectTakes, handlerConfig, directTakesConfig, pollConfig, inactivityMinutes }) {
   const {
     graphics,
     onAirIds,
@@ -37,6 +37,7 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
   });
   const listRef = useRef(null);
   const collectionListRef = useRef(null);
+  const searchRef = useRef(null);
 
   // Persist collection to localStorage
   useEffect(() => {
@@ -111,6 +112,11 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     return { storyGroups: groups, visualOrder: order };
   }, [displayedGraphics]);
 
+  // TODO: replace with real API call once Mosart direct-take endpoint is confirmed
+  const triggerDirectTake = useCallback((dt) => {
+    console.log('Direct take triggered — recall:', dt.recallNumber, 'name:', dt.name);
+  }, []);
+
   const cueToOnAirStory = useCallback(() => {
     if (!timeline?.currentStory?.id) return;
 
@@ -145,6 +151,23 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
   useEffect(() => {
     const handler = (e) => {
       if (showShortcuts || showDisconnect || showSettings) return;
+
+      if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+        return;
+      }
+
+      // Escape blurs the search input (before the early-return guard below)
+      if (e.key === 'Escape' && document.activeElement === searchRef.current) {
+        e.preventDefault();
+        searchRef.current.blur();
+        return;
+      }
+
+      // Don't fire navigation shortcuts while typing in the search input
+      if (document.activeElement === searchRef.current) return;
 
       if (e.key === 'Tab' && collectionOpen) {
         e.preventDefault();
@@ -210,11 +233,17 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
       } else if (e.ctrlKey && e.key === 'd') {
         e.preventDefault();
         onToggleDarkMode();
+      } else if (directTakesConfig?.length) {
+        const match = directTakesConfig.find(dt => dt.shortcut && matchesShortcut(e, dt.shortcut));
+        if (match) {
+          e.preventDefault();
+          triggerDirectTake(match);
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [visualOrder, selectedIndex, collection, collectionSelectedIndex, activePanel, collectionOpen, showShortcuts, showDisconnect, showSettings, takeIn, takeOut, takeAllOut, continueGraphic, cueToOnAirStory, onToggleDarkMode, handlerConfig]);
+  }, [visualOrder, selectedIndex, collection, collectionSelectedIndex, activePanel, collectionOpen, showShortcuts, showDisconnect, showSettings, takeIn, takeOut, takeAllOut, continueGraphic, cueToOnAirStory, onToggleDarkMode, handlerConfig, directTakesConfig]);
 
   // Inactivity auto-logout
   useEffect(() => {
@@ -328,6 +357,9 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
                     <SettingsToggle label="Show Continue Points" checked={showContinuePoints} onChange={onToggleShowContinuePoints} />
                     <SettingsToggle label="Show Continue Button" checked={showContinueButton} onChange={onToggleShowContinueButton} />
                     <SettingsToggle label="Show On-Air Status" checked={showOnAirStatus} onChange={onToggleShowOnAirStatus} />
+                    {directTakesConfig?.length > 0 && (
+                      <SettingsToggle label="Show Direct Takes" checked={showDirectTakes} onChange={onToggleShowDirectTakes} />
+                    )}
                     {/* TODO: Re-enable once Preview Server thumbnails are tested on-network */}
                     {/* <SettingsToggle label="Show Thumbnails" checked={showThumbnails} onChange={onToggleShowThumbnails} /> */}
                   </div>
@@ -369,7 +401,7 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
         )}
 
         {/* ===== FILTER BAR ===== */}
-        <FilterBar filters={filters} onToggle={toggleFilter} searchText={searchText} onSearchChange={setSearchText} hasActive={hasActiveFilters} onClear={clearFilters} />
+        <FilterBar filters={filters} onToggle={toggleFilter} searchText={searchText} onSearchChange={setSearchText} hasActive={hasActiveFilters} onClear={clearFilters} searchRef={searchRef} />
 
         {/* ===== FIXED TOP: On-Air Story Info ===== */}
         <div style={{ padding: '8px 12px', flexShrink: 0 }}>
@@ -463,6 +495,10 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
           })}
         </div>
 
+        {showDirectTakes && directTakesConfig?.length > 0 && (
+          <DirectTakesDeck directTakesConfig={directTakesConfig} onTrigger={triggerDirectTake} />
+        )}
+
       </div>{/* end main panel */}
 
       {/* ===== PERSONAL COLLECTION PANEL ===== */}
@@ -488,7 +524,7 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
       )}
 
       {/* ===== MODALS ===== */}
-      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} directTakesConfig={directTakesConfig} />}
       {showDisconnect && <DisconnectModal serverName={server.name} onConfirm={onDisconnect} onCancel={() => setShowDisconnect(false)} />}
     </div>
   );
@@ -585,7 +621,58 @@ function PersonalCollection({ collection, onAirIds, onRemove, onClear, onTakeIn,
   );
 }
 
-function FilterBar({ filters, onToggle, searchText, onSearchChange, hasActive, onClear }) {
+function matchesShortcut(e, shortcut) {
+  const parts = [];
+  if (e.ctrlKey) parts.push('ctrl');
+  if (e.altKey) parts.push('alt');
+  if (e.shiftKey) parts.push('shift');
+  const key = e.key;
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) return false;
+  parts.push(key.length === 1 ? key.toUpperCase() : key);
+  return parts.join('+').toLowerCase() === shortcut.toLowerCase();
+}
+
+function DirectTakesDeck({ directTakesConfig, onTrigger }) {
+  if (!directTakesConfig?.length) return null;
+
+  // Split into rows of max 3; buttons in each row share the width equally
+  const rows = [];
+  for (let i = 0; i < directTakesConfig.length; i += 3) {
+    rows.push(directTakesConfig.slice(i, i + 3));
+  }
+
+  return (
+    <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)', padding: '6px 12px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {rows.map((row, ri) => (
+        <div key={ri} style={{ display: 'flex', gap: 4 }}>
+          {row.map((dt, di) => (
+            <button
+              key={di}
+              onClick={() => onTrigger(dt)}
+              title={[dt.name || `Recall ${dt.recallNumber}`, dt.shortcut].filter(Boolean).join(' — ')}
+              style={{
+                flex: 1, minWidth: 0,
+                padding: '5px 6px',
+                border: '1px solid var(--border)',
+                borderRadius: 4,
+                background: 'var(--surface)',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 13, fontWeight: 600,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >
+              {dt.name || `Recall ${dt.recallNumber}`}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FilterBar({ filters, onToggle, searchText, onSearchChange, hasActive, onClear, searchRef }) {
   const textBadge = (active) => ({
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     minWidth: 32, height: 18, borderRadius: 3, padding: '0 4px',
@@ -642,6 +729,7 @@ function FilterBar({ filters, onToggle, searchText, onSearchChange, hasActive, o
 
       {/* Text search */}
       <input
+        ref={searchRef}
         type="text"
         value={searchText}
         onChange={e => onSearchChange(e.target.value)}

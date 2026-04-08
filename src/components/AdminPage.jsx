@@ -5,8 +5,8 @@ import { createMosartApi, isVersionAtLeast } from '../services/mosartApi.js';
 
 const emptyServer = { name: '', host: '', port: 55167, apiKey: '' };
 
-export default function AdminPage({ servers, onSave, handlerConfig, onSaveHandlerConfig, onChangePassword, stationName, onSaveStationName, pollConfig, onSavePollConfig, inactivityMinutes, onSaveInactivityMinutes, onBack }) {
-  const [tab, setTab] = useState('general'); // 'general' | 'servers' | 'handlers' | 'security'
+export default function AdminPage({ servers, onSave, handlerConfig, onSaveHandlerConfig, directTakesConfig, onSaveDirectTakesConfig, onChangePassword, stationName, onSaveStationName, pollConfig, onSavePollConfig, inactivityMinutes, onSaveInactivityMinutes, onBack }) {
+  const [tab, setTab] = useState('general'); // 'general' | 'servers' | 'handlers' | 'directtakes' | 'security'
 
   return (
     <div style={{
@@ -36,13 +36,14 @@ export default function AdminPage({ servers, onSave, handlerConfig, onSaveHandle
           { id: 'general', label: 'General' },
           { id: 'servers', label: 'Servers' },
           { id: 'handlers', label: 'Handlers' },
+          { id: 'directtakes', label: 'Direct Takes' },
           { id: 'security', label: 'Security' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{
               flex: 1, padding: '7px 0', border: 'none', borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
               background: 'none', cursor: 'pointer', color: tab === t.id ? 'var(--accent)' : 'var(--text-dim)',
-              fontSize: 12, fontWeight: tab === t.id ? 700 : 400, fontFamily: 'inherit',
+              fontSize: 11, fontWeight: tab === t.id ? 700 : 400, fontFamily: 'inherit',
               marginBottom: -1, textAlign: 'center',
             }}>
             {t.label}
@@ -59,6 +60,9 @@ export default function AdminPage({ servers, onSave, handlerConfig, onSaveHandle
       )}
       {tab === 'handlers' && (
         <HandlersTab handlerConfig={handlerConfig} onSave={onSaveHandlerConfig} />
+      )}
+      {tab === 'directtakes' && (
+        <DirectTakesTab directTakesConfig={directTakesConfig} onSave={onSaveDirectTakesConfig} />
       )}
       {tab === 'security' && (
         <SecurityTab onChangePassword={onChangePassword} />
@@ -672,6 +676,230 @@ function PortSection({ inputStyle, labelStyle, sectionStyle }) {
         style={{ background: 'var(--accent)', border: 'none', borderRadius: 4, padding: '8px 20px', cursor: (status === 'saving' || status === 'restarting') ? 'default' : 'pointer', color: '#fff', fontSize: 11, fontWeight: 600, fontFamily: 'inherit', opacity: (status === 'saving' || status === 'restarting') ? 0.5 : 1 }}>
         {status === 'saving' ? 'Saving…' : 'Save & Restart'}
       </button>
+    </div>
+  );
+}
+
+// ─── Direct Takes Tab ────────────────────────────────────────────────────────
+
+// System shortcuts that cannot be assigned to a direct take
+const RESERVED_SHORTCUTS = new Set([
+  'arrowup', 'arrowdown', 'arrowleft', 'arrowright',
+  'escape', ' ', 'home', 'end', 'pagedown', 'tab',
+  'ctrl+d', 'ctrl+f',
+]);
+
+function normalizeShortcut(e) {
+  const parts = [];
+  if (e.ctrlKey) parts.push('Ctrl');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  const key = e.key;
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) return null;
+  parts.push(key.length === 1 ? key.toUpperCase() : key);
+  return parts.join('+');
+}
+
+function DirectTakesTab({ directTakesConfig, onSave }) {
+  const [focusIndex, setFocusIndex] = useState(-1);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const savedTimer = useRef(null);
+
+  const save = (config) => {
+    onSave(config);
+    setSavedFlash(true);
+    clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSavedFlash(false), 1500);
+  };
+
+  const update = (index, field, value) => {
+    save(directTakesConfig.map((dt, i) => i === index ? { ...dt, [field]: value } : dt));
+  };
+
+  const add = () => {
+    const newIndex = directTakesConfig.length;
+    save([...directTakesConfig, { recallNumber: '', name: '', shortcut: null }]);
+    setFocusIndex(newIndex);
+    setTimeout(() => setFocusIndex(-1), 100);
+  };
+
+  const remove = (index) => {
+    save(directTakesConfig.filter((_, i) => i !== index));
+  };
+
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.6, flex: 1 }}>
+          Configure direct takes that can be triggered from the control view.
+          Each entry has a recall number (sent to Mosart) and an optional keyboard shortcut.
+        </div>
+        <span style={{
+          fontSize: 10, color: '#4caf50', marginLeft: 12, flexShrink: 0,
+          opacity: savedFlash ? 1 : 0, transition: 'opacity 0.4s',
+        }}>✓ Saved</span>
+      </div>
+
+      {directTakesConfig.length === 0 && (
+        <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 12, border: '1px dashed var(--border)', borderRadius: 6 }}>
+          No direct takes configured.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {directTakesConfig.map((dt, index) => (
+          <DirectTakeRow
+            key={index}
+            number={index + 1}
+            dt={dt}
+            rowIndex={index}
+            directTakesConfig={directTakesConfig}
+            focusOnMount={index === focusIndex}
+            onChangeRecall={v => update(index, 'recallNumber', v)}
+            onChangeName={v => update(index, 'name', v)}
+            onChangeShortcut={v => update(index, 'shortcut', v)}
+            onRemove={() => remove(index)}
+          />
+        ))}
+      </div>
+
+      <button onClick={add}
+        style={{ marginTop: 4, width: '100%', padding: '10px', border: '1px dashed var(--border)', borderRadius: 6, background: 'none', cursor: 'pointer', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 11, fontWeight: 600, fontFamily: 'inherit' }}>
+        <PlusIcon /> Add Direct Take {directTakesConfig.length > 0 ? `(${directTakesConfig.length})` : ''}
+      </button>
+    </div>
+  );
+}
+
+function DirectTakeRow({ number, dt, rowIndex, directTakesConfig, onChangeRecall, onChangeName, onChangeShortcut, onRemove, focusOnMount }) {
+  const nameRef = useRef(null);
+
+  const siblingShortcuts = directTakesConfig
+    .filter((_, i) => i !== rowIndex)
+    .map(d => d.shortcut)
+    .filter(Boolean)
+    .map(s => s.toLowerCase());
+
+  useEffect(() => {
+    if (focusOnMount && nameRef.current) nameRef.current.focus();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)' }}>
+      {/* Number badge */}
+      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-dim)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 3, padding: '2px 5px', flexShrink: 0, minWidth: 20, textAlign: 'center' }}>
+        {number}
+      </span>
+
+      {/* Recall number */}
+      <input
+        type="text"
+        value={dt.recallNumber}
+        onChange={e => onChangeRecall(e.target.value)}
+        placeholder="Recall #"
+        style={{ width: 60, padding: '5px 7px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit', outline: 'none', flexShrink: 0 }}
+      />
+
+      {/* Name */}
+      <input
+        ref={nameRef}
+        value={dt.name}
+        onChange={e => onChangeName(e.target.value)}
+        placeholder="Name"
+        style={{ flex: 1, padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit', outline: 'none', minWidth: 0 }}
+      />
+
+      {/* Shortcut capture */}
+      <ShortcutCapture value={dt.shortcut} onChange={onChangeShortcut} siblingShortcuts={siblingShortcuts} />
+
+      {/* Remove */}
+      <button onClick={onRemove}
+        style={{ background: 'rgba(229,57,53,0.1)', border: '1px solid rgba(229,57,53,0.3)', borderRadius: 4, width: 26, height: 26, cursor: 'pointer', color: '#e53935', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <TrashIcon />
+      </button>
+    </div>
+  );
+}
+
+function ShortcutCapture({ value, onChange, siblingShortcuts }) {
+  const [capturing, setCapturing] = useState(false);
+  const [error, setError] = useState('');
+  const errorTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (!capturing) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') { setCapturing(false); return; }
+      const shortcut = normalizeShortcut(e);
+      if (!shortcut) return;
+      const key = shortcut.toLowerCase();
+      if (RESERVED_SHORTCUTS.has(key)) {
+        setCapturing(false);
+        setError('Reserved by system');
+        clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = setTimeout(() => setError(''), 2500);
+        return;
+      }
+      if (siblingShortcuts.includes(key)) {
+        setCapturing(false);
+        setError('Already in use');
+        clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = setTimeout(() => setError(''), 2500);
+        return;
+      }
+      onChange(shortcut);
+      setCapturing(false);
+    };
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [capturing, siblingShortcuts, onChange]);
+
+  useEffect(() => () => clearTimeout(errorTimerRef.current), []);
+
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={() => { setCapturing(true); setError(''); }}
+        onBlur={() => setCapturing(false)}
+        title={capturing ? 'Press a key combination — Escape to cancel' : 'Click to assign a shortcut'}
+        style={{
+          width: 84, height: 26, padding: '0 6px',
+          border: `1px solid ${error ? 'rgba(229,57,53,0.5)' : capturing ? 'var(--accent)' : 'var(--border)'}`,
+          borderRadius: 4,
+          background: capturing ? 'rgba(91,155,213,0.1)' : 'var(--bg)',
+          color: capturing ? 'var(--accent)' : value ? 'var(--text-primary)' : 'var(--text-dim)',
+          fontSize: 10, fontFamily: 'monospace', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          outline: 'none',
+          animation: capturing ? 'pulse 1s ease-in-out infinite' : 'none',
+        }}
+      >
+        {capturing ? 'press key…' : (value || '—')}
+      </button>
+      {value && !capturing && (
+        <button
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => onChange(null)}
+          title="Clear shortcut"
+          style={{
+            position: 'absolute', top: -5, right: -5,
+            width: 14, height: 14, borderRadius: '50%',
+            background: 'var(--border)', border: 'none',
+            color: 'var(--text-dim)', cursor: 'pointer',
+            fontSize: 10, lineHeight: 1, padding: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'inherit',
+          }}>×</button>
+      )}
+      {error && (
+        <div style={{ position: 'absolute', top: 30, right: 0, fontSize: 9, color: '#e53935', whiteSpace: 'nowrap', background: 'var(--bg)', padding: '2px 6px', borderRadius: 3, border: '1px solid rgba(229,57,53,0.3)', zIndex: 10 }}>
+          {error}
+        </div>
+      )}
     </div>
   );
 }

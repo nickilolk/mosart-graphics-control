@@ -7,6 +7,7 @@ import AdminPage from './components/AdminPage.jsx';
 const DEFAULT_SETTINGS = {
   stationName: '',
   handlerConfig: [],
+  directTakesConfig: [],
   pollConfig: { timelineMs: 500, graphicsMs: 1500 },
   inactivityMinutes: 15,
   adminPassword: '1234',
@@ -41,6 +42,9 @@ export default function App() {
   });
   const [showOnAirStatus, setShowOnAirStatus] = useState(() => {
     try { return JSON.parse(localStorage.getItem('mosart-show-onairstatus') ?? 'true'); } catch { return true; }
+  });
+  const [showDirectTakes, setShowDirectTakes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('mosart-show-directtakes') ?? 'true'); } catch { return true; }
   });
 
   // Password gate state
@@ -127,6 +131,9 @@ export default function App() {
   const toggleShowOnAirStatus = useCallback(() => {
     setShowOnAirStatus(v => { const next = !v; try { localStorage.setItem('mosart-show-onairstatus', JSON.stringify(next)); } catch {} return next; });
   }, []);
+  const toggleShowDirectTakes = useCallback(() => {
+    setShowDirectTakes(v => { const next = !v; try { localStorage.setItem('mosart-show-directtakes', JSON.stringify(next)); } catch {} return next; });
+  }, []);
 
   const vars = darkMode ? darkTheme : lightTheme;
 
@@ -177,7 +184,10 @@ export default function App() {
           onToggleShowContinueButton={toggleShowContinueButton}
           showOnAirStatus={showOnAirStatus}
           onToggleShowOnAirStatus={toggleShowOnAirStatus}
+          showDirectTakes={showDirectTakes}
+          onToggleShowDirectTakes={toggleShowDirectTakes}
           handlerConfig={settings.handlerConfig}
+          directTakesConfig={settings.directTakesConfig}
           pollConfig={settings.pollConfig}
           inactivityMinutes={settings.inactivityMinutes}
         />
@@ -189,6 +199,8 @@ export default function App() {
           onSave={saveServers}
           handlerConfig={settings.handlerConfig}
           onSaveHandlerConfig={(config) => saveSettings({ handlerConfig: config })}
+          directTakesConfig={settings.directTakesConfig}
+          onSaveDirectTakesConfig={(config) => saveSettings({ directTakesConfig: config })}
           onChangePassword={(newPw) => saveSettings({ adminPassword: newPw })}
           stationName={settings.stationName}
           onSaveStationName={(name) => saveSettings({ stationName: name })}
