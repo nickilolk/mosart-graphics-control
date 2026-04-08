@@ -114,8 +114,6 @@ Each button can optionally have a keyboard shortcut assigned. Shortcuts are vali
 
 The deck can be hidden via **Show Direct Takes** in the settings dropdown.
 
-> **Note:** Direct take triggering requires a Mosart API endpoint that is not yet confirmed. The UI and configuration are complete; the actual trigger call will be wired up once the endpoint is verified.
-
 ### Settings
 
 Click the gear icon (top right when connected) to access display toggles:

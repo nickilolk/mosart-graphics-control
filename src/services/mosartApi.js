@@ -224,6 +224,15 @@ export function createMosartApi(serverConfig) {
     },
 
     /**
+     * GET /api/v1/command/directtake?number={number} (since v5.4.0)
+     * Trigger a DirectTake template by recall number.
+     * @param {string|number} number - The recall number configured in Mosart
+     */
+    async directTake(number) {
+      return request(`/api/v1/command/directtake?number=${encodeURIComponent(number)}`);
+    },
+
+    /**
      * GET /api/v1/command/template?type={type}&variant={variant}
      * Trigger a template by type and variant (name).
      * @param {string} type - e.g. 'Sound', 'Camera', 'Adlib'

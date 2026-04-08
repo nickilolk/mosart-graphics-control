@@ -19,6 +19,7 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     takeOut,
     takeAllOut,
     continueGraphic,
+    directTake,
     buildInfo,
   } = useMosartConnection(server, { ...pollConfig, enableOnAirStatus: showOnAirStatus });
   const buildVersion = buildInfo?.version || null;
@@ -112,10 +113,9 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     return { storyGroups: groups, visualOrder: order };
   }, [displayedGraphics]);
 
-  // TODO: replace with real API call once Mosart direct-take endpoint is confirmed
   const triggerDirectTake = useCallback((dt) => {
-    console.log('Direct take triggered — recall:', dt.recallNumber, 'name:', dt.name);
-  }, []);
+    directTake(dt.recallNumber);
+  }, [directTake]);
 
   const cueToOnAirStory = useCallback(() => {
     if (!timeline?.currentStory?.id) return;

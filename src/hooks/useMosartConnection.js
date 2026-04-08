@@ -384,6 +384,20 @@ export function useMosartConnection(serverConfig, { timelinePollMs = DEFAULT_TIM
   }, []);
 
   /**
+   * Trigger a DirectTake template by recall number.
+   */
+  const directTake = useCallback(async (number) => {
+    if (!apiRef.current) return;
+    try {
+      debug(`directTake(${number})`);
+      await apiRef.current.directTake(number);
+    } catch (err) {
+      console.error('Direct take failed:', err);
+      showActionError(`Direct take failed: ${err.message}`);
+    }
+  }, [showActionError]);
+
+  /**
    * Trigger a template by type and variant.
    */
   const triggerTemplate = useCallback(async (type, variant) => {
@@ -424,5 +438,6 @@ export function useMosartConnection(serverConfig, { timelinePollMs = DEFAULT_TIM
     takeAllOut,
     continueGraphic,
     triggerTemplate,
+    directTake,
   };
 }
