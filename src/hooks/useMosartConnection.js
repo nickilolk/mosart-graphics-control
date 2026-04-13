@@ -97,7 +97,20 @@ export function useMosartConnection(serverConfig, { timelinePollMs = DEFAULT_TIM
 
       // Filter out graphics from "shadow" stories (same slug as a paged story
       // but no pageNumber — these are duplicate story entries in the rundown).
-      const filtered = rawGraphics.filter(g => !lookup[g.storyId]?.isShadow);
+      const shadowFiltered = rawGraphics.filter(g => !lookup[g.storyId]?.isShadow);
+
+      // Within each story, deduplicate by graphics_id (from fields[]).
+      // Keeps the first occurrence; graphics without a graphics_id are always kept.
+      const seenGraphicsIds = new Map(); // storyId → Set of graphics_id strings
+      const filtered = shadowFiltered.filter(g => {
+        const gid = g.fields?.find(f => f.name === 'graphics_id')?.value;
+        if (!gid) return true;
+        if (!seenGraphicsIds.has(g.storyId)) seenGraphicsIds.set(g.storyId, new Set());
+        const seen = seenGraphicsIds.get(g.storyId);
+        if (seen.has(gid)) return false;
+        seen.add(gid);
+        return true;
+      });
 
       const processed = filtered.map(g => ({
         ...g,
