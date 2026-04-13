@@ -9,7 +9,7 @@ export function ShortcutsModal({ onClose, directTakesConfig = [] }) {
     { keys: 'PgDn', action: 'Continue graphic' },
     { keys: 'Space', action: 'Cue to on-air story' },
     { keys: 'Ctrl + D', action: 'Toggle dark/light mode' },
-    { keys: 'Ctrl + F', action: 'Focus search / filter bar' },
+    { keys: 'Ctrl + K', action: 'Focus search / filter bar' },
     { keys: 'Home', action: 'Jump to first graphic' },
     { keys: 'End', action: 'Jump to last graphic' },
     { keys: 'Tab', action: 'Switch focus between main list and collection' },

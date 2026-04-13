@@ -686,7 +686,7 @@ function PortSection({ inputStyle, labelStyle, sectionStyle }) {
 const RESERVED_SHORTCUTS = new Set([
   'arrowup', 'arrowdown', 'arrowleft', 'arrowright',
   'escape', ' ', 'home', 'end', 'pagedown', 'tab',
-  'ctrl+d', 'ctrl+f',
+  'ctrl+d', 'ctrl+k',
 ]);
 
 function normalizeShortcut(e) {

@@ -152,7 +152,7 @@ export default function ControlPage({ server, onDisconnect, darkMode, onToggleDa
     const handler = (e) => {
       if (showShortcuts || showDisconnect || showSettings) return;
 
-      if (e.ctrlKey && e.key === 'f') {
+      if (e.ctrlKey && e.key === 'k') {
         e.preventDefault();
         searchRef.current?.focus();
         searchRef.current?.select();
